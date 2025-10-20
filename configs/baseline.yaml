@@ -1,0 +1,24 @@
+# Config base para un experimento baseline
+experiment_name: "baseline_yolov8n_640"
+seed: 42
+images_dir: "/ruta/a/coco/val2017"
+ann_file: "/ruta/a/coco/annotations/instances_val2017.json"
+subset_file: "configs/subset_val2017.json"
+
+model:
+  kind: "yolo-v8n"     # opciones: yolo-v8n, yolo-v8s, yolo-v5s, frcnn-r50-fpn, effdet-d0
+  imgsz: 640
+  conf: 0.25
+  iou: 0.7
+  device: "cuda"       # "cuda" | "cpu"
+  half: true
+
+runtime:
+  batch: 1
+  warmup_iters: 10
+  measure_iters: 100
+
+outputs:
+  dir: "outputs"
+  figures_dir: "outputs/figures"
+  tables_dir: "outputs/tables"

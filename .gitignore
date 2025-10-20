@@ -1,0 +1,4 @@
+datasets/
+outputs/
+.venv/
+.idea
