@@ -17,6 +17,7 @@ from src.eval.coco_utils import (
 )
 from src.viz.plots import pareto_map_fps, ap_bar_per_class, pr_curve
 from src.bench.latency import measure_fps
+import inspect
 
 
 def resolve_device(requested: str | None) -> str:
@@ -38,21 +39,49 @@ def resolve_device(requested: str | None) -> str:
     return requested
 
 
-def load_model(kind: str, imgsz: int, conf: float, iou: float, device: str, half: bool):
+def load_model(kind: str, imgsz: int, conf: float, iou: float, device: str, half: bool, weights: str | None = None):
     kind = kind.lower()
+
     if kind.startswith('yolo-v8'):
         from src.models.yolo import YOLOv8Detector
-        weights = 'yolov8n.pt' if kind == 'yolo-v8n' else 'yolov8s.pt'
-        return YOLOv8Detector(weights=weights, device=device, half=half, imgsz=imgsz, conf=conf, iou=iou)
+        w = weights or ('yolov8n.pt' if kind == 'yolo-v8n' else 'yolov8s.pt')
+        return YOLOv8Detector(weights=w, device=device, half=half, imgsz=imgsz, conf=conf, iou=iou)
+
     if kind == 'frcnn-r50-fpn':
         from src.models.frcnn import FasterRCNNDetector
-        return FasterRCNNDetector(device=device, conf=conf)
+        try:
+            return FasterRCNNDetector(device=device, conf=conf, weights=weights)
+        except TypeError:
+            m = FasterRCNNDetector(device=device, conf=conf)
+            if weights:
+                import torch
+                m.model.load_state_dict(torch.load(weights, map_location=device), strict=False)
+            return m
+
     if kind == 'frcnn-mbv3-fpn':
         from src.models.frcnn_mbv3 import FasterRCNN_MBV3_FPN
-        return FasterRCNN_MBV3_FPN(device=device, conf=conf)
+        try:
+            return FasterRCNN_MBV3_FPN(device=device, conf=conf, weights=weights)
+        except TypeError:
+            m = FasterRCNN_MBV3_FPN(device=device, conf=conf)
+            if weights:
+                import torch
+                m.model.load_state_dict(torch.load(weights, map_location=device), strict=False)
+            return m
+
     if kind == 'effdet-d0':
         from src.models.effdet import EfficientDetDetector
-        return EfficientDetDetector(variant='tf_efficientdet_d0', device=device, conf=conf)
+        ctor = EfficientDetDetector
+        sig = inspect.signature(ctor).parameters
+        kw = dict(variant='tf_efficientdet_d0', device=device, conf=conf)
+        if 'ckpt' in sig: kw['ckpt'] = weights
+        elif 'weights' in sig: kw['weights'] = weights
+        for name in ('img_size', 'image_size', 'train_img_size'):
+            if name in sig:
+                kw[name] = imgsz
+                break
+        return ctor(**kw)
+
     raise NotImplementedError(f"Modelo no soportado: {kind}")
 
 
@@ -104,7 +133,7 @@ def save_coco_json_safe(dets_per_image: Dict[str, List[Dict[str, Any]]],
     import re, json
     results = []
     valid_cls, invalid_cls, tiny_boxes = 0, 0, 0
-    pat = re.compile(r'(\d{6,12})')  # id numérico en nombre de archivo COCO
+    pat = re.compile(r'(\d{6,12})')
     for path, dets in dets_per_image.items():
         m = pat.search(os.path.basename(path))
         if not m:
@@ -129,7 +158,7 @@ def save_coco_json_safe(dets_per_image: Dict[str, List[Dict[str, Any]]],
             results.append({
                 "image_id": image_id,
                 "category_id": cat,
-                "bbox": [x_min, y_min, w, h],  # COCO = XYWH
+                "bbox": [x_min, y_min, w, h],
                 "score": score
             })
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
@@ -160,7 +189,6 @@ def get_names_dict_from_model(wrapper_obj):
                 ok = False
                 break
         if ok:
-            # convertir list a dict si hace falta
             if isinstance(obj, list):
                 return {i: n for i, n in enumerate(obj)}
             if isinstance(obj, dict):
@@ -187,7 +215,11 @@ def main():
     ap.add_argument('--conf-map',   default='', help='Conf por modelo, ej: "yolo-v8n:0.001,frcnn-mbv3-fpn:0.001"')
     ap.add_argument('--imgsz-map',  default='', help='Img size por modelo, ej: "yolo-v8n:640,frcnn-mbv3-fpn:800"')
     ap.add_argument('--maxdet-map', default='', help='Max dets por modelo, ej: "yolo-v8n:300,frcnn-mbv3-fpn:300"')
+    ap.add_argument('--weights-map', default='',
+               help='Rutas por modelo: "yolo-v8n:/ruta/best.pt,frcnn-mbv3-fpn:/ruta/best.pth,effdet-d0:/ruta/best.pth"')
     args = ap.parse_args()
+
+    weights_map = parse_map(args.weights_map)
 
     conf_map   = parse_map(args.conf_map)
     imgsz_map  = parse_map(args.imgsz_map)
@@ -226,8 +258,9 @@ def main():
             maxdet_for_model = int(maxdet_map.get(k_lower, 300))
             print(f"[INFO] Hparams {kind}: conf={conf_for_model} imgsz={imgsz_for_model} max_det={maxdet_for_model}")
             
-            model = load_model(k_lower, imgsz_for_model, conf_for_model, args.iou, device_for_model, args.half)
-
+            weights_for_model = weights_map.get(k_lower)
+            model = load_model(k_lower, imgsz_for_model, conf_for_model, args.iou, device_for_model, args.half, weights=weights_for_model)
+            
             if hasattr(model, "max_det"):
                 try: model.max_det = maxdet_for_model
                 except Exception: pass

@@ -1,4 +1,76 @@
-datasets/
-outputs/
+# --- SO / IDE ---
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# --- Entornos / builds Python ---
 .venv/
-.idea
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.cache/
+dist/
+build/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Datos grandes (NO versionar) ---
+datasets/
+data/
+!datasets/README.md
+!data/README.md
+
+# --- Pesos y artefactos pesados ---
+runs/
+checkpoints/
+weights/
+!runs/README.md
+!checkpoints/README.md
+!weights/README.md
+
+# --- Salidas de experimentos ---
+outputs/
+outputs_final/
+figuras/qualitative/
+figuras/qualitative_grids/
+!outputs/README.md
+!outputs_final/README.md
+
+
+# --- LaTeX temporales ---
+*.aux
+*.bbl
+*.blg
+*.brf
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.lox
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.run.xml
+*.fls
+*.fdb_latexmk
+*.xdv
+_minted*
+texput.log
+
+.env
+.env.*
+*.secret
+secrets.jsonoutputs*/**/*.json
+temp/
